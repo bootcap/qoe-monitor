@@ -38,9 +38,9 @@ namespace ns3
     m_outputFormatContext = NULL;
     m_outputFormat = NULL;
 
-    m_codecId = CODEC_ID_NONE;
+    m_codecId = AV_CODEC_ID_NONE;
     m_codecType = type;
-    m_sampleFormat = SAMPLE_FMT_NONE;
+    m_sampleFormat = AV_SAMPLE_FMT_NONE;
     m_bitRate = 0;
     m_sampleRate = 0;
     m_channels = 0;
@@ -56,12 +56,12 @@ namespace ns3
     if (m_fileOpen && m_modeOfOperation == READ)
       {
         m_fileOpen = false;
-        av_close_input_file(m_inputFormatContext);
+        avformat_close_input(&m_inputFormatContext);
       }
     else if (m_fileOpen && m_modeOfOperation == WRITE)
       {
         m_fileOpen = false;
-        av_close_input_file(m_outputFormatContext); // Even if looks wrong, the function is that, indeed.
+        avformat_close_input(&m_outputFormatContext); // Even if looks wrong, the function is that, indeed.
       }
   }
 
@@ -70,7 +70,6 @@ namespace ns3
   Container::InitForRead()
   {
     /* Initialize each output format */
-    av_register_all();
 
     /* Open input file - FIXME: deprecated */
     int ret = 0;
@@ -87,7 +86,7 @@ namespace ns3
       }
 
     /* Let's find out stream's information */
-    if ((ret = av_find_stream_info(m_inputFormatContext)) < 0)
+    if ((ret = avformat_find_stream_info(m_inputFormatContext, NULL)) < 0)
       {
         std::cout << "Container: Cannot find stream information\n";
         return false;
@@ -97,7 +96,7 @@ namespace ns3
     m_streamNumber = -1;
     for (unsigned int i = 0; i < m_inputFormatContext->nb_streams; i++)
       {
-        if (m_inputFormatContext->streams[i]->codec->codec_type
+        if (m_inputFormatContext->streams[i]->codecpar->codec_type
             == m_codecType)
           {
             m_streamNumber = i;
@@ -119,7 +118,12 @@ namespace ns3
     m_sampleRate = 1/m_timeUnit;
 
     /* CodecContext extraction */
-    m_inputCodecContext = *(m_inputFormatContext->streams[m_streamNumber]->codec);
+    if (avcodec_parameters_to_context(&m_inputCodecContext, 
+			    m_inputFormatContext->streams[m_streamNumber]->codecpar) < 0)
+      {
+        std::cout << "Container: Cannot copy context\n";
+        return false;
+      }
 
     /* Stream extraction for possible further usage */
     m_copyStream = *(m_inputFormatContext->streams[m_streamNumber]);
@@ -152,7 +156,7 @@ namespace ns3
         /* EOF has been reached
          * The file needs to be closed */
         m_fileOpen = false;
-        av_close_input_file(m_inputFormatContext);
+        avformat_close_input(&m_inputFormatContext);
 
         return false;
       }
@@ -191,7 +195,7 @@ namespace ns3
   }
 
   void
-  Container::SetCodecId(enum CodecID codecId)
+  Container::SetCodecId(enum AVCodecID codecId)
   {
     m_codecId = codecId;
   }
@@ -203,7 +207,7 @@ namespace ns3
   }
 
   void
-  Container::SetSampleFormat(enum SampleFormat format)
+  Container::SetSampleFormat(enum AVSampleFormat format)
   {
     m_sampleFormat = format;
   }
@@ -226,7 +230,7 @@ namespace ns3
     m_channels = channels;
   }
 
-  enum CodecID
+  enum AVCodecID
   Container::GetCodecId()
   {
     return m_codecId;
@@ -238,7 +242,7 @@ namespace ns3
     return m_codecType;
   }
 
-  enum SampleFormat
+  enum AVSampleFormat
   Container::GetSampleFormat()
   {
     return m_sampleFormat;

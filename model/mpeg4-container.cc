@@ -64,11 +64,11 @@ namespace ns3
         m_outputFormatContext->oformat = m_outputFormat;
 
         /* Assign the output name to the output context */
-        snprintf(m_outputFormatContext->filename,
-            sizeof(m_outputFormatContext->filename), "%s", m_filename.c_str());
+        snprintf(m_outputFormatContext->url,
+            sizeof(m_outputFormatContext->url), "%s", m_filename.c_str());
 
         /* Now the output format is OK. I need to add a multimedia stream to it */
-        AVStream* outputStream = av_new_stream(m_outputFormatContext, 0);
+        AVStream* outputStream = avformat_new_stream(m_outputFormatContext, 0);
 
         // Check sul risultato
         if (!outputStream)
@@ -78,37 +78,27 @@ namespace ns3
           }
 
         /* Start output stream configuration by means of STREAM COPY and CODEC CONTEXT COPY */
-        if (avcodec_copy_context(outputStream->codec, &m_copyCodecContext))
+        // if (avcodec_copy_context(outputStream->codecpar, &m_copyCodecContext))
+        if (avcodec_parameters_from_context(outputStream->codecpar, &m_copyCodecContext) < 0)
           {
             std::cout << "Mpeg4Container: Codec context copy error! Exit!\n";
             return false;
           }
 
-        outputStream->pts = (AVFrac) {
-                                      m_copyStream.pts.val,
-                                      (int64_t) outputStream->codec->time_base.num,
-                                      (int64_t) outputStream->codec->time_base.den
-                                     };
+        // outputStream->pts = av_stream_get_end_pts(&m_copyStream);
 
-        outputStream->codec->time_base = m_copyStream.time_base;
+        outputStream->time_base = m_copyStream.time_base;
         outputStream->sample_aspect_ratio = m_copyStream.sample_aspect_ratio;
-        outputStream->codec->codec_tag = 0;
+        outputStream->codecpar->codec_tag = 0;
 
         /* Set the actual time-base unit */
-        m_timeUnit = ((float) m_copyCodecContext.time_base.num) / (m_copyCodecContext.time_base.den);
+        m_timeUnit = ((float) m_copyCodecContext.time_base.num) / m_copyCodecContext.time_base.den;
 
         /* Check over the requirements for each specific format (see
          * row 84 of output-example.c */
         if (m_outputFormatContext->flags & AVFMT_GLOBALHEADER)
           {
-            outputStream->codec->flags |= CODEC_FLAG_GLOBAL_HEADER;
-          }
-
-        /* Setup output parameters (see row 485 of output-example.c) */
-        if (av_set_parameters(m_outputFormatContext, NULL) < 0)
-          {
-            std::cout << "Mpeg4Container: invalid parameters\n";
-            return false;
+            m_copyCodecContext.flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
           }
 
         av_dump_format(m_outputFormatContext, 0, m_filename.c_str(), 1);
@@ -126,7 +116,12 @@ namespace ns3
         m_fileOpen = true;
 
         /* Write output file header */
-        av_write_header(m_outputFormatContext);
+        int error = avformat_write_header(m_outputFormatContext, NULL);
+        if (error < 0)
+          {
+            std::cout << "Could not write output file header. Error:" << error << std::endl;
+            return false;
+          }
 
         return true;
       }
@@ -174,7 +169,7 @@ namespace ns3
         std::cout << "Mpeg4Container: Error while writing video frame\n";
       }
 
-    av_free_packet(&outputFrame);
+    av_packet_unref(&outputFrame);
     free(tempBuffer);
 
     return true;

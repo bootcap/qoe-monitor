@@ -40,6 +40,7 @@ namespace ns3
   bool
   WavContainer::InitForWrite()
   {
+    const AVCodec *inputCodec;
     /* After the basic initialization, I must initialize the actual context */
     if (m_modeOfOperation == WRITE)
       {
@@ -70,11 +71,17 @@ namespace ns3
         m_outputFormatContext->oformat = m_outputFormat;
 
         /* Assign the output name to the output context */
-        snprintf(m_outputFormatContext->filename,
-            sizeof(m_outputFormatContext->filename), "%s", m_filename.c_str());
+        snprintf(m_outputFormatContext->url,
+            sizeof(m_outputFormatContext->url), "%s", m_filename.c_str());
+
+        if (!(inputCodec = avcodec_find_decoder(m_outputFormatContext->streams[0]->codecpar->codec_id)))
+          {
+            std::cout << "Coude not find input codec\n";
+            return false;
+          }
 
         /* Now the output format is OK. I need to add a multimedia stream to it */
-        AVStream* outputStream = av_new_stream(m_outputFormatContext, 1);
+        AVStream* outputStream = avformat_new_stream(m_outputFormatContext, inputCodec);
 
         // Check sul risultato
         if (!outputStream)
@@ -84,7 +91,7 @@ namespace ns3
           }
 
         /* Start output stream configuration by means of STREAM COPY and CODEC CONTEXT COPY */
-        if (avcodec_copy_context(outputStream->codec, &m_copyCodecContext) || !m_copyCodecContextAvailable)
+        if (avcodec_parameters_from_context(outputStream->codecpar, &m_copyCodecContext) < 0 || !m_copyCodecContextAvailable)
           {
             std::cout << "WavContainer: Codec context copy error! Exit!\n";
             return false;
@@ -96,19 +103,14 @@ namespace ns3
 
         if (m_copyStreamAvailable)
           {
-            outputStream->codec->codec_id = m_copyStream.codec->codec_id;
-            outputStream->codec->codec_type = m_copyStream.codec->codec_type;
-            outputStream->codec->sample_fmt = m_copyStream.codec->sample_fmt;
-            outputStream->codec->bit_rate = m_copyStream.codec->bit_rate;
-            outputStream->codec->sample_rate = m_copyStream.codec->sample_rate;
-            outputStream->codec->channels = m_copyStream.codec->channels;
+            outputStream->codecpar->codec_id = m_copyStream.codecpar->codec_id;
+            outputStream->codecpar->codec_type = m_copyStream.codecpar->codec_type;
+            outputStream->codecpar->format = m_copyStream.codecpar->format;
+            outputStream->codecpar->bit_rate = m_copyStream.codecpar->bit_rate;
+            outputStream->codecpar->sample_rate = m_copyStream.codecpar->sample_rate;
+            outputStream->codecpar->channels = m_copyStream.codecpar->channels;
 
-            outputStream->pts = (AVFrac) {
-                                          m_copyStream.pts.val,
-                                          (int64_t) outputStream->codec->time_base.num,
-                                          (int64_t) outputStream->codec->time_base.den
-                                         };
-            outputStream->codec->time_base = m_copyStream.time_base;
+            outputStream->time_base = m_copyStream.time_base;
           }
         else
           {
@@ -118,33 +120,26 @@ namespace ns3
 
 #if 0
         /* Start output stream configuration */
-        outputStream->codec->codec_id = m_codecId;
-        outputStream->codec->codec_type = m_codecType;
-        outputStream->codec->sample_fmt = m_sampleFormat;
-        outputStream->codec->bit_rate = m_bitRate;
-        outputStream->codec->sample_rate = m_sampleRate;
-        outputStream->codec->channels = m_channels;
+        outputStream->codecpar->codec_id = m_codecId;
+        outputStream->codecpar->codec_type = m_codecType;
+        outputStream->codecpar->format = m_sampleFormat;
+        outputStream->codecpar->bit_rate = m_bitRate;
+        outputStream->codecpar->sample_rate = m_sampleRate;
+        outputStream->codecpar->channels = m_channels;
 #endif
 
         /* Check over the requirements for each specific format (see
          * row 84 of output-example.c */
         if (m_outputFormatContext->flags & AVFMT_GLOBALHEADER)
           {
-            outputStream->codec->flags |= CODEC_FLAG_GLOBAL_HEADER;
-          }
-
-        /* Setup output parameters (see row 485 of output-example.c) */
-        if (av_set_parameters(m_outputFormatContext, NULL) < 0)
-          {
-            std::cout << "WavContainer: invalid parameters\n";
-            return false;
+            m_copyCodecContext.flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
           }
 
         av_dump_format(m_outputFormatContext, 0, m_filename.c_str(), 1);
 
         if (!(m_outputFormat->flags & AVFMT_NOFILE))
           {
-            if (url_fopen(&m_outputFormatContext->pb, m_filename.c_str(), AVIO_FLAG_WRITE)
+            if (avio_open(&m_outputFormatContext->pb, m_filename.c_str(), AVIO_FLAG_WRITE)
                 < 0)
               {
                 std::cout << "WavContainer: Could not open output file\n";
@@ -155,7 +150,12 @@ namespace ns3
         m_fileOpen = true;
 
         /* Write output file header */
-        av_write_header(m_outputFormatContext);
+        int error = avformat_write_header(m_outputFormatContext, NULL);
+        if (error < 0)
+          {
+            std::cout << "Could not write output file header. Error:" << error << std::endl;
+            return false;
+          }
 
         return true;
       }
@@ -218,7 +218,7 @@ namespace ns3
             std::cout << "WavContainer: Error while writing audio frame\n";
           }
 
-        av_free_packet(&outputFrame);
+        av_packet_unref(&outputFrame);
       }
 
     return true;
@@ -256,13 +256,13 @@ namespace ns3
         std::cout << "WavContainer: Error while writing audio frame\n";
       }
 
-    av_free_packet(&outputFrame);
+    av_packet_unref(&outputFrame);
 
     av_write_trailer(m_outputFormatContext);
     if (!(m_outputFormat->flags & AVFMT_NOFILE))
       {
         /* close the output file */
-        url_fclose(m_outputFormatContext->pb);
+        avio_close(m_outputFormatContext->pb);
         m_fileOpen = false;
       }
 

@@ -37,8 +37,8 @@ namespace ns3
       Packetizer* packetizer, SimulationDataset* simulationDataset) :
     m_receiverSocketAddress(),
     m_socket(0),
-    m_packetQueue(),
-    m_lastPacket(false)
+    m_lastPacket(false),
+    m_packetQueue()
   {
     /* Default implementation requires UDP */
     Init(node, packetizer, simulationDataset, false);

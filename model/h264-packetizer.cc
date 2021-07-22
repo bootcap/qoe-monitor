@@ -77,7 +77,7 @@ namespace ns3
             CreateFragments(&readFrame);
 
             /* Free the packet */
-            av_free_packet(&readFrame);
+            av_packet_unref(&readFrame);
             packet = m_fragmentsQueue.front();
             m_fragmentsQueue.pop();
 
@@ -134,7 +134,7 @@ namespace ns3
 #endif
 
             /* Free the packet */
-            av_free_packet(&readFrame);
+            av_packet_unref(&readFrame);
             return true;
           }
       }
@@ -217,7 +217,7 @@ namespace ns3
 #endif
     
     /* Free the packet */
-    av_free_packet(&readFrame);
+    av_packet_unref(&readFrame);
 
     return true;
   }

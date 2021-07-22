@@ -71,11 +71,11 @@ namespace ns3
 
     /* Generic getter/setter methods */
     void
-    SetCodecId(enum CodecID codecId);
+    SetCodecId(enum AVCodecID codecId);
     void
     SetCodecType(enum AVMediaType codecType);
     void
-    SetSampleFormat(enum SampleFormat format);
+    SetSampleFormat(enum AVSampleFormat format);
     void
     SetBitRate(int bitRate);
     void
@@ -89,11 +89,11 @@ namespace ns3
     void
     SetStream(AVStream copyStream);
 
-    enum CodecID
+    enum AVCodecID
     GetCodecId();
     enum AVMediaType
     GetCodecType();
-    enum SampleFormat
+    enum AVSampleFormat
     GetSampleFormat();
     int
     GetBitRate();
@@ -157,9 +157,9 @@ namespace ns3
     float m_timeUnit;
     int m_streamNumber;
 
-    enum CodecID m_codecId;
+    enum AVCodecID m_codecId;
     enum AVMediaType m_codecType;
-    enum SampleFormat m_sampleFormat;
+    enum AVSampleFormat m_sampleFormat;
     int m_bitRate;
     int m_sampleRate;
     int m_channels;

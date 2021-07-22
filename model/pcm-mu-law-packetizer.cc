@@ -100,7 +100,7 @@ namespace ns3
         /* Now I dequeue exactly ONE packet */
         FillOnePacket(packetId, timestamp, buffer, packetSize);
 
-        av_free_packet(&readFrame);
+        av_packet_unref(&readFrame);
       }
 
     return true;
